@@ -17,7 +17,7 @@ OPENAI_URL      = "https://api.openai.com/v1/chat/completions"
 MODEL           = "gpt-4o-mini"
 MAX_HISTORY     = 20   # número máximo de mensagens no histórico por usuário
 
-bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode=None)
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, parse_mode=None)
 
 # ── Personalidade da Laura ────────────────────────────────────────────────────
 SYSTEM_PROMPT = (
