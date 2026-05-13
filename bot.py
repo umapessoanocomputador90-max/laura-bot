@@ -1,5 +1,6 @@
 import os
 import logging
+import requests
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -8,7 +9,6 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from openai import OpenAI
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -17,8 +17,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Clientes ─────────────────────────────────────────────────────────────────
-openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 
 # ── Personalidade da Laura ────────────────────────────────────────────────────
 SYSTEM_PROMPT = """
@@ -57,6 +57,24 @@ def add_to_history(user_id: int, role: str, content: str):
         conversation_history[user_id] = history[-MAX_HISTORY:]
 
 
+# ── Chamada à OpenAI via requests (sem SDK) ───────────────────────────────────
+def ask_openai(messages: list[dict]) -> str:
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": messages,
+        "temperature": 0.85,
+        "max_tokens": 300,
+    }
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()
+
+
 # ── Handlers ──────────────────────────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -88,13 +106,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + get_history(user.id)
 
     try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            temperature=0.85,
-            max_tokens=300,
-        )
-        reply = response.choices[0].message.content.strip()
+        reply = ask_openai(messages)
     except Exception as e:
         logger.error("Erro na OpenAI: %s", e)
         reply = "Ai, deu um probleminha aqui… 😳 Me manda mensagem de novo, tá?"
@@ -111,8 +123,7 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
-    app = ApplicationBuilder().token(token).build()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
